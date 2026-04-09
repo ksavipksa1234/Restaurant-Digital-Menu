@@ -12,50 +12,54 @@ jobs:
           #import <CoreLocation/CoreLocation.h>
           #import <objc/runtime.h>
 
-          @interface NassGPSMgr : NSObject
+          @interface NassGPSMgr : UIViewController
           @property (strong) UIWindow *win;
           @property (assign) CLLocationCoordinate2D fakePos;
           @end
 
           @implementation NassGPSMgr
           + (void)load {
-              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5*NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                  NassGPSMgr *m = [NassGPSMgr new];
-                  m.fakePos = CLLocationCoordinate2DMake(24.7136, 46.6753);
-                  m.win = [[UIWindow alloc] initWithFrame:CGRectMake(40, 120, 55, 55)];
-                  m.win.backgroundColor = [UIColor colorWithRed:0 green:0.4 blue:0.8 alpha:0.9];
-                  m.win.layer.cornerRadius = 27.5;
-                  m.win.windowLevel = 3500;
-                  UIButton *b = [UIButton buttonWithType:0];
-                  b.frame = m.win.bounds;
-                  [b setTitle:@"GPS" forState:0];
-                  b.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-                  [b addTarget:m action:@selector(openMenu) forControlEvents:64];
-                  [m.win addSubview:b];
-                  [m.win makeKeyAndVisible];
-                  UIPanGestureRecognizer *p = [[UIPanGestureRecognizer alloc] initWithTarget:m action:@selector(pan:)];
-                  [m.win addGestureRecognizer:p];
-                  objc_setAssociatedObject([UIApplication sharedApplication], "_nass", m, 1);
+              static dispatch_once_t onceToken;
+              dispatch_once(&onceToken, ^{
+                  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5*NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                      NassGPSMgr *m = [[NassGPSMgr alloc] init];
+                      m.fakePos = CLLocationCoordinate2DMake(24.7136, 46.6753);
+                      
+                      m.win = [[UIWindow alloc] initWithFrame:CGRectMake(50, 150, 60, 60)];
+                      m.win.backgroundColor = [UIColor colorWithRed:0 green:0.5 blue:1 alpha:0.9];
+                      m.win.layer.cornerRadius = 30;
+                      m.win.windowLevel = UIWindowLevelAlert + 10.0;
+                      m.win.rootViewController = m;
+                      
+                      UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
+                      b.frame = m.win.bounds;
+                      [b setTitle:@"GPS" forState:UIControlStateNormal];
+                      [b addTarget:m action:@selector(openMenu) forControlEvents:UIControlEventTouchUpInside];
+                      [m.view addSubview:b];
+                      
+                      [m.win makeKeyAndVisible];
+                      objc_setAssociatedObject([UIApplication sharedApplication], "_nass", m, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                      
+                      UIPanGestureRecognizer *p = [[UIPanGestureRecognizer alloc] initWithTarget:m action:@selector(pan:)];
+                      [m.win addGestureRecognizer:p];
+                  });
               });
           }
 
           - (void)openMenu {
-              UIViewController *top = [UIApplication sharedApplication].keyWindow.rootViewController;
-              while (top.presentedViewController) top = top.presentedViewController;
-
-              UIAlertController *a = [UIAlertController alertControllerWithTitle:@"NassGPS Pro" message:@"أدخل الإحداثيات الجديدة" preferredStyle:1];
-              [a addTextFieldWithConfigurationHandler:^(UITextField *f){ f.placeholder = @"Latitude (مثال: 24.7136)"; f.keyboardType = UIKeyboardTypeDecimalPad; }];
-              [a addTextFieldWithConfigurationHandler:^(UITextField *f){ f.placeholder = @"Longitude (مثال: 46.6753)"; f.keyboardType = UIKeyboardTypeDecimalPad; }];
+              UIAlertController *a = [UIAlertController alertControllerWithTitle:@"NassGPS Pro" message:@"أدخل الإحداثيات الجديدة" preferredStyle:UIAlertControllerStyleAlert];
+              [a addTextFieldWithConfigurationHandler:^(UITextField *f){ f.placeholder = @"Latitude"; f.keyboardType = UIKeyboardTypeDecimalPad; }];
+              [a addTextFieldWithConfigurationHandler:^(UITextField *f){ f.placeholder = @"Longitude"; f.keyboardType = UIKeyboardTypeDecimalPad; }];
               
-              [a addAction:[UIAlertAction actionWithTitle:@"حفظ وتفعيل" style:0 handler:^(id x){
+              [a addAction:[UIAlertAction actionWithTitle:@"حفظ" style:UIAlertActionStyleDefault handler:^(id x){
                   NSString *latS = a.textFields[0].text;
                   NSString *lngS = a.textFields[1].text;
                   if(latS.length > 0 && lngS.length > 0) {
                       self.fakePos = CLLocationCoordinate2DMake([latS doubleValue], [lngS doubleValue]);
                   }
               }]];
-              [a addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:1 handler:nil]];
-              [top presentViewController:a animated:YES completion:nil];
+              [a addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:UIAlertActionStyleCancel handler:nil]];
+              [self presentViewController:a animated:YES completion:nil];
           }
 
           - (void)pan:(UIPanGestureRecognizer *)p {
@@ -84,5 +88,5 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: NassGPS-Final-Fixed
+          name: NassGPS-Ultimate
           path: nassgps.dylib
