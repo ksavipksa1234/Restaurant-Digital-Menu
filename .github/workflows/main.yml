@@ -7,12 +7,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract Project
-        run: unzip LocationSpoofer-master.zip
-
-      - name: Build NassGPS
+      - name: Extract and Build
         run: |
-          cd LocationSpoofer-master
+          unzip *.zip
+          # البحث عن المجلد الذي يحتوي على ملفات الكود .m
+          SOURCE_DIR=$(find . -name "*.m" -exec dirname {} + | head -n 1)
+          cd "$SOURCE_DIR"
+          
+          # أمر البناء الاحترافي
           SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           clang -dynamiclib -arch arm64 -isysroot "$SDK_PATH" *.m -o nassgps.dylib -framework Foundation -framework CoreLocation -framework UIKit -lobjc -undefined dynamic_lookup
 
@@ -20,4 +22,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NassGPS-Final
-          path: LocationSpoofer-master/nassgps.dylib
+          path: "**/nassgps.dylib"
