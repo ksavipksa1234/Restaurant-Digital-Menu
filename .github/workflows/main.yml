@@ -1,0 +1,23 @@
+name: Build NassGPS Pro
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract Project
+        run: unzip LocationSpoofer-master.zip
+
+      - name: Build NassGPS
+        run: |
+          cd LocationSpoofer-master
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          clang -dynamiclib -arch arm64 -isysroot "$SDK_PATH" *.m -o nassgps.dylib -framework Foundation -framework CoreLocation -framework UIKit -lobjc -undefined dynamic_lookup
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NassGPS-Final
+          path: LocationSpoofer-master/nassgps.dylib
