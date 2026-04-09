@@ -1,25 +1,85 @@
 name: Build NassGPS Pro
 on: [push, workflow_dispatch]
-
 jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Extract and Build
+      - name: Create Pro Sniper Code
         run: |
-          unzip *.zip
-          # البحث عن المجلد الذي يحتوي على ملفات الكود .m
-          SOURCE_DIR=$(find . -name "*.m" -exec dirname {} + | head -n 1)
-          cd "$SOURCE_DIR"
-          
-          # أمر البناء الاحترافي
-          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
-          clang -dynamiclib -arch arm64 -isysroot "$SDK_PATH" *.m -o nassgps.dylib -framework Foundation -framework CoreLocation -framework UIKit -lobjc -undefined dynamic_lookup
+          cat <<EOF > nassgps.m
+          #import <Foundation/Foundation.h>
+          #import <UIKit/UIKit.h>
+          #import <CoreLocation/CoreLocation.h>
+          #import <objc/runtime.h>
 
-      - name: Upload Artifact
+          @interface NassGPSMgr : NSObject
+          @property (strong) UIWindow *win;
+          @property (assign) CLLocationCoordinate2D fakePos;
+          @end
+
+          @implementation NassGPSMgr
+          + (void)load {
+              dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5*NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                  NassGPSMgr *m = [NassGPSMgr new];
+                  m.fakePos = CLLocationCoordinate2DMake(24.7136, 46.6753); // الافتراضي: الرياض
+                  
+                  m.win = [[UIWindow alloc] initWithFrame:CGRectMake(20, 100, 50, 50)];
+                  m.win.backgroundColor = [UIColor colorWithRed:0 green:0.5 blue:1 alpha:0.8];
+                  m.win.layer.cornerRadius = 25;
+                  m.win.windowLevel = 3000;
+                  
+                  UIButton *b = [UIButton buttonWithType:0];
+                  b.frame = m.win.bounds;
+                  [b setTitle:@"GPS" forState:0];
+                  [b addTarget:m action:@selector(openMenu) forControlEvents:64];
+                  [m.win addSubview:b];
+                  [m.win makeKeyAndVisible];
+                  
+                  UIPanGestureRecognizer *p = [[UIPanGestureRecognizer alloc] initWithTarget:m action:@selector(pan:)];
+                  [m.win addGestureRecognizer:p];
+                  objc_setAssociatedObject([UIApplication sharedApplication], "_nass", m, 1);
+              });
+          }
+
+          - (void)openMenu {
+              UIAlertController *a = [UIAlertController alertControllerWithTitle:@"NassGPS Pro" message:@"أدخل الإحداثيات الجديدة" preferredStyle:1];
+              [a addTextFieldWithConfigurationHandler:^(UITextField *f){ f.placeholder = @"Latitude"; f.keyboardType = 8; }];
+              [a addTextFieldWithConfigurationHandler:^(UITextField *f){ f.placeholder = @"Longitude"; f.keyboardType = 8; }];
+              [a addAction:[UIAlertAction actionWithTitle:@"حفظ وتفعيل" style:0 handler:^(id x){
+                  double lat = [a.textFields[0].text doubleValue];
+                  double lng = [a.textFields[1].text doubleValue];
+                  if(lat != 0) self.fakePos = CLLocationCoordinate2DMake(lat, lng);
+              }]];
+              [a addAction:[UIAlertAction actionWithTitle:@"إلغاء" style:1 handler:nil]];
+              [[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:a animated:YES completion:nil];
+          }
+
+          - (void)pan:(UIPanGestureRecognizer *)p {
+              CGPoint t = [p translationInView:self.win];
+              self.win.center = CGPointMake(self.win.center.x + t.x, self.win.center.y + t.y);
+              [p setTranslation:CGPointZero inView:self.win];
+          }
+          @end
+
+          @implementation NSObject (NassHook)
+          - (struct CLLocationCoordinate2D)fake_coordinate {
+              NassGPSMgr *m = objc_getAssociatedObject([UIApplication sharedApplication], "_nass");
+              double j = ((double)arc4random_uniform(100)/1000000.0);
+              return (struct CLLocationCoordinate2D){m.fakePos.latitude + j, m.fakePos.longitude + j};
+          }
+          @end
+
+          __attribute__((constructor)) static void init() {
+              method_exchangeImplementations(class_getInstanceMethod(objc_getClass("CLLocation"), @selector(coordinate)),
+                                           class_getInstanceMethod(objc_getClass("NSObject"), @selector(fake_coordinate)));
+          }
+          EOF
+          
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
+          clang -dynamiclib -arch arm64 -isysroot "$SDK_PATH" nassgps.m -o nassgps.dylib -framework Foundation -framework CoreLocation -framework UIKit -lobjc -undefined dynamic_lookup
+
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: NassGPS-Final
-          path: "**/nassgps.dylib"
+          name: NassGPS-Final-Package
+          path: nassgps.dylib
